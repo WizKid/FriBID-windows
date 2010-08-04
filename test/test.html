@@ -1,0 +1,156 @@
+<HTML>
+<HEAD>
+<TITLE>FriBID Plug-in Test</TITLE>
+</HEAD>
+<BODY id="bodyId">
+<center>
+<h1>FriBID Plug-in </h1>
+</center>
+
+<embed id="version" type="application/x-personal-version" width="0" height="0"><br>
+<embed id="authentication" type="application/x-personal-authentication" width="0" height="0"><br>
+<embed id="signer2" type="application/x-personal-signer2" width="0" height="0"><br>
+
+<embed id="version-test" type="application/x-personal-version-test" width="0" height="0"><br>
+<embed id="authentication-test" type="application/x-personal-authentication-test" width="0" height="0"><br>
+<embed id="signer2-test" type="application/x-personal-signer2-test" width="0" height="0"><br>
+
+<!-- <embed type="application/x-java-mozilla-npruntime-scriptable-plugin" style="display: block; width: 50%; height: 100px;"><br> -->
+
+<script type="text/javascript">
+function runCode(obj, code) {
+    try {
+        return eval(code);
+    } catch (e) {
+        return e;
+    }
+}
+
+function printResult(title, tests, obj1, obj2) {
+    document.write("<h2>"+ title +"</h2><table><thead><td>Test</td><td>Expected</td><td></td><td>Result</td></thead>");
+    for (var i in tests) {
+        var res1 = runCode(obj1, tests[i]);
+        var res2 = runCode(obj2, tests[i]);
+        var equal = (res1 == null && res2 == null || res1 != null && res2 != null && res1.toString() == res2.toString());
+        var equalStr = (equal) ? "==" : "!=";
+        document.write("<tr "+ ((!equal) ? "style='color: #AA0000'" : "") +"><td>"+ tests[i] +"<td>"+ res1 +"</td><td>"+ equalStr +"</td><td>"+ res2 +"</td></tr>");
+    }
+    document.write("</table>");
+}
+
+
+var versionTestObj = document.getElementById('version-test');
+var authenticationTestObj = document.getElementById('authentication-test');
+var signerTestObj = document.getElementById('signer2-test');
+
+var versionObj = document.getElementById('version');
+var authenticationObj = document.getElementById('authentication');
+var signerObj = document.getElementById('signer2');
+
+var versionTests = [
+    "obj.GetVersion()",
+    "obj.GetVersion('asdas')",
+    "obj.GetParam()",
+    "obj.SetParam()",
+    "obj.PerformAction()"
+];
+
+var authenticationTests = [
+    "obj.PerformAction('Authenticate')",
+    "obj.performaction('Authenticate')",
+    "obj.GetParam('Challenge')",
+    "obj.SetParam('Challenge', 'a')",
+    "obj.PerformAction('Authenticate')",
+    "obj.SetParam('Challenge', '')",
+    "obj.PerformAction('Authenticate')",
+    "obj.GetParam('Challenge')",
+    "obj.SetParam('Challenge', '83åäö')",
+    "obj.GetLastError()",
+    "obj.GetParam('Challenge')",
+    "obj.GetParam('Signature')",
+    "obj.GetLastError()",
+    "obj.GetParam('asdasd')",
+    "obj.GetLastError()",
+    "obj.SetParam('Signature', 'test')",
+    "obj.GetLastError()",
+    "obj.SetParam('Signatasdasdasdure', 'test')",
+    "obj.GetLastError()",
+    "obj.SetParam('Policys', 'taasda')",
+    "obj.GetLastError()",
+    "obj.GetParam('Policys')",
+    "obj.GetLastError()",
+    "obj.SetParam('Subjects', 'asd34534')",
+    "obj.GetLastError()",
+    "obj.GetParam('Subjects')",
+    "obj.GetLastError()",
+    "obj.SetParam('NonVisibleData', 'asd4')",
+    "obj.GetLastError()",
+    "obj.GetParam('NonVisibleData')",
+    "obj.GetLastError()",
+    "obj.SetParam('TextToBeSigned', 'asd3asdad4534')",
+    "obj.GetLastError()",
+    "obj.GetParam('TextToBeSigned')",
+    "obj.GetLastError()",
+    "obj.SetParam('Subjects')",
+    "obj.GetParam()",
+    "obj.GetLastError()",
+];
+
+var signerTests = [
+    "obj.PerformAction('Sign')",
+    "obj.PerformAction('sign')",
+    "obj.SetParam('Nonce', '1')",
+    "obj.PerformAction('Sign')",
+    "obj.SetParam('TextToBeSigned', 'a')",
+    "obj.PerformAction('Sign')",
+    "obj.GetParam('Challenge')",
+    "obj.GetParam('challenge')",
+    "obj.GetLastError()",
+    "obj.GetParam('Nonce')",
+    "obj.GetParam('nonce')",
+    "obj.GetParam('noNCe')",
+    "obj.GetLastError()",
+    "obj.SetParam('Nonce', 'abasdafjd')",
+    "obj.SetParam('NoNcE', 'abasdafjd')",
+    "obj.GetLastError()",
+    "obj.SetParam('Nonce', 'abasdafjd¤¤')",
+    "obj.GetLastError()",
+    "obj.GetParam('Nonce')",
+    "obj.GetParam('Policys')",
+    "obj.GetParam('Subjects')",
+    "obj.GetParam('Signature')",
+    "obj.SetParam('Policys', 'taasda')",
+    "obj.GetLastError()",
+    "obj.GetParam('Policys')",
+    "obj.GetLastError()",
+    "obj.SetParam('Subjects', 'asd34534')",
+    "obj.GetLastError()",
+    "obj.GetParam('Subjects')",
+    "obj.GetLastError()",
+    "obj.SetParam('Signature', '65asdasd')",
+    "obj.GetLastError()",
+    "obj.GetParam('Signature')",
+    "obj.GetLastError()",
+    "obj.SetParam('Subjects')",
+    "obj.GetParam()",
+    "obj.GetLastError()",
+    "obj.SetParam('NonVisibleData', 'asd4')",
+    "obj.GetLastError()",
+    "obj.GetParam('NonVisibleData')",
+    "obj.GetLastError()",
+    "obj.SetParam('TextToBeSigned', 'asd3asdad4534')",
+    "obj.GetLastError()",
+    "obj.GetParam('TextToBeSigned')",
+    "obj.GetLastError()",
+    "obj.PerformAction()",
+    "obj.PerformAction('apa')",
+];
+
+printResult("Version", versionTests, versionObj, versionTestObj);
+printResult("Authentication", authenticationTests, authenticationObj, authenticationTestObj);
+printResult("Signer2", signerTests, signerObj, signerTestObj);
+
+</script>
+
+</BODY>
+</HTML>
