@@ -55,7 +55,7 @@ enum PluginType {
 
 enum PluginError {
     PE_OK = 0,
-    PE_UnknownError = 1, // Maybe this is used for something else in the original plugin?
+    PE_UnknownError =     1, // Maybe this is used for something else in the original plugin?
     PE_BadData =          8001,
     PE_UserCancel =       8002,
     PE_UnknownParam =     8004,
@@ -69,7 +69,7 @@ enum PluginError {
     PE_BlockedPIN =       8102
 };
 
-union PluginInfo {
+union Data {
     struct {
         /* Input parameters */
         char *challenge;
@@ -99,8 +99,10 @@ private:
     NPWindow *m_pWindow;
     PluginType m_eType;
     PluginError m_eLastError;
-    PluginInfo m_Info;
+    Data m_Info;
     char *m_sUrl;
+    char *m_sHostname;
+    char *m_sIpAddress;
 
     char **GetInfoPointer(const char *name, bool set, int *maxLength);
     char *GetWindowProperty(const char *const identifiers[]);
@@ -110,7 +112,7 @@ public:
     FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance);
     ~FriBIDPlugin();
 
-    PluginInfo GetInfo() { return this->m_Info; };
+    Data GetInfo() { return this->m_Info; };
     PluginType GetType() { return this->m_eType; };
     PluginError GetLastError() { return this->m_eLastError; };
 
@@ -120,8 +122,8 @@ public:
 
     const char *GetVersion();
     const char *GetParam(const char *name);
-    bool SetParam(const char *name, const char *value);
-    bool PerformAction(const char *action);
+    void SetParam(const char *name, const char *value);
+    void PerformAction(const char *action);
     void SetError(PluginError error);
 };
 

@@ -200,7 +200,19 @@
 				Name="common"
 				>
 				<File
+					RelativePath=".\common\format.cpp"
+					>
+				</File>
+				<File
 					RelativePath=".\common\memory.cpp"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="bankid"
+				>
+				<File
+					RelativePath=".\bankid\bankid.cpp"
 					>
 				</File>
 			</Filter>
@@ -214,6 +226,10 @@
 				Name="common"
 				>
 				<File
+					RelativePath=".\common\format.h"
+					>
+				</File>
+				<File
 					RelativePath=".\common\memory.h"
 					>
 				</File>
@@ -223,6 +239,14 @@
 				>
 				<File
 					RelativePath=".\plugin\plugin.h"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="bankid"
+				>
+				<File
+					RelativePath=".\bankid\bankid.h"
 					>
 				</File>
 			</Filter>

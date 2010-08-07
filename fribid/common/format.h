@@ -1,0 +1,1 @@
+char *CreateFormatString(const char *format, ...);

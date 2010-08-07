@@ -42,6 +42,7 @@
 
 #include "plugin.h"
 #include "../common/memory.h"
+#include "../bankid/bankid.h"
 #include "npfunctions.h"
 
 static NPIdentifier sGetVersion_id;
@@ -468,10 +469,15 @@ FriBIDPlugin::FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance) :
     sPerformAction_id = NPN_GetStringIdentifier("PerformAction");
     sGetLastError_id = NPN_GetStringIdentifier("GetLastError");
 
-    static const char *const identifiers[] = {
+    static const char *const hrefIdentifiers[] = {
         "location", "href", NULL
     };
-    this->m_sUrl = this->GetWindowProperty(identifiers);
+    this->m_sUrl = this->GetWindowProperty(hrefIdentifiers);
+    static const char *const hostnameIdentifiers[] = {
+        "location", "hostname", NULL
+    };
+    this->m_sHostname = this->GetWindowProperty(hostnameIdentifiers);
+    this->m_sIpAddress = Memory::AllocString("127.0.0.1");
 }
 
 FriBIDPlugin::~FriBIDPlugin()
@@ -589,14 +595,14 @@ const char *FriBIDPlugin::GetParam(const char *name)
     return *valuePtr;
 }
 
-bool FriBIDPlugin::SetParam(const char *name, const char *value)
+void FriBIDPlugin::SetParam(const char *name, const char *value)
 {
     int maxLength;
     char **valuePtr = this->GetInfoPointer(name, true, &maxLength);
 
     if (valuePtr == NULL) {
         this->m_eLastError = PE_UnknownParam;
-        return false;
+        return;
     }
 
     // Validate that the value is a base64 string. So valid characters are A-Z, a-z, 0-9 and + /
@@ -608,13 +614,13 @@ bool FriBIDPlugin::SetParam(const char *name, const char *value)
         const char c = value[i];
         if (!(c == 43 || (c >= 47 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c == 61 && i >= len -2))) {
             this->m_eLastError = PE_BadCharValue;
-            return false;
+            return;
         }
     }
 
     if (len > maxLength) {
         this->m_eLastError = PE_TooLongValue;
-        return false;
+        return;
     }
 
     if (!*valuePtr)
@@ -623,15 +629,15 @@ bool FriBIDPlugin::SetParam(const char *name, const char *value)
     *valuePtr = Memory::AllocString(value);
     if (*valuePtr == NULL) {
         this->m_eLastError = PE_UnknownError; // TODO: What error should it really be?
-        return false;
+        return;
     }
 
     this->m_eLastError = PE_OK;
-    return true;
 }
 
-bool FriBIDPlugin::PerformAction(const char *action)
+void FriBIDPlugin::PerformAction(const char *action)
 {
+    char *ret = NULL;
     switch(this->m_eType) {
         case PT_Authentication:
             if (strcmp(action, "authenticate") != 0)
@@ -639,15 +645,23 @@ bool FriBIDPlugin::PerformAction(const char *action)
 
             if (!this->m_Info.auth.challenge || this->m_Info.auth.challenge[0] == '\0') {
                 this->m_eLastError = PE_MissingParameter;
-                return false;
+                return;
             }
             if (!this->isHttps()) {
                 this->m_eLastError = PE_NotSSL;
-                return false;
+                return;
             }
 
-            this->m_eLastError = PE_UnknownError;
-            return true;
+            this->m_eLastError = BankId::authenticate(this->m_Info.auth.challenge,
+                                                      this->m_Info.auth.subjectFilter,
+                                                      this->m_sHostname,
+                                                      this->m_sIpAddress, &ret);
+            if (ret) {
+                if (this->m_Info.sign.signature)
+                    Memory::Free(this->m_Info.sign.signature);
+                this->m_Info.sign.signature = ret;
+            }
+            return;
         case PT_Signer:
             if (strcmp(action, "sign") != 0)
                 break;
@@ -655,20 +669,26 @@ bool FriBIDPlugin::PerformAction(const char *action)
             if (!this->m_Info.sign.nonce || this->m_Info.sign.nonce[0] == '\0' ||
                 !this->m_Info.sign.message || this->m_Info.sign.message[0] == '\0') {
                 this->m_eLastError = PE_MissingParameter;
-                return false;
+                return;
             }
 
             if (!this->isHttps()) {
                 this->m_eLastError = PE_NotSSL;
-                return false;
+                return;
             }
 
-            this->m_eLastError = PE_UnknownError;
-            return true;
+            this->m_eLastError = BankId::sign(this->m_Info.sign.nonce, this->m_Info.sign.subjectFilter,
+                                              this->m_Info.sign.message, this->m_Info.sign.invisibleMessage,
+                                              this->m_sHostname, this->m_sIpAddress, &ret);
+            if (ret) {
+                if (this->m_Info.sign.signature)
+                    Memory::Free(this->m_Info.sign.signature);
+                this->m_Info.sign.signature = ret;
+            }
+            return;
     }
 
     this->m_eLastError = PE_InvalidAction;
-    return false;
 }
 
 void FriBIDPlugin::SetError(PluginError error)
