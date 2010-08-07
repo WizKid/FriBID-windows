@@ -467,10 +467,17 @@ FriBIDPlugin::FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance) :
     sSetParam_id = NPN_GetStringIdentifier("SetParam");
     sPerformAction_id = NPN_GetStringIdentifier("PerformAction");
     sGetLastError_id = NPN_GetStringIdentifier("GetLastError");
+
+    static const char *const identifiers[] = {
+        "location", "href", NULL
+    };
+    this->m_sUrl = this->GetWindowProperty(identifiers);
 }
 
 FriBIDPlugin::~FriBIDPlugin()
 {
+    if (this->m_sUrl)
+        Memory::Free(this->m_sUrl);
     if (m_pScriptableObject)
         NPN_ReleaseObject(m_pScriptableObject);
 }
@@ -480,9 +487,50 @@ NPBool FriBIDPlugin::init(NPWindow* pNPWindow)
     if(pNPWindow == NULL)
         return false;
 
-    m_pWindow = pNPWindow;
+    this->m_pWindow = pNPWindow;
 
     return true;
+}
+
+bool FriBIDPlugin::isHttps()
+{
+    return (this->m_sUrl && strncmp(this->m_sUrl, "https://", 8) == 0);
+}
+
+char *FriBIDPlugin::GetWindowProperty(const char *const identifiers[])
+{
+    NPObject *obj = NULL;
+    NPN_GetValue(this->m_pNPInstance, NPNVWindowNPObject, &obj);
+    if (!obj)
+        return NULL;
+
+    NPVariant value;
+    char *ret = NULL;
+    const char *const *identifier = &identifiers[0];
+    while (true) {
+        NPIdentifier ident = NPN_GetStringIdentifier(*identifier);
+        if (!ident)
+            break;
+
+        NPN_GetProperty(this->m_pNPInstance, obj, ident, &value);
+        NPN_ReleaseObject(obj);
+
+        identifier++;
+        if (*identifier) {
+            if (!NPVARIANT_IS_OBJECT(value))
+                break;
+            obj = NPVARIANT_TO_OBJECT(value);
+        } else {
+            if (NPVARIANT_IS_STRING(value))
+                ret = Memory::AllocString(NPVARIANT_TO_STRING(value).UTF8Characters);
+            break;
+        }
+    }
+
+    if (obj)
+        NPN_ReleaseObject(obj);
+    NPN_ReleaseVariantValue(&value);
+    return ret;
 }
 
 const char *FriBIDPlugin::GetVersion()
@@ -593,6 +641,10 @@ bool FriBIDPlugin::PerformAction(const char *action)
                 this->m_eLastError = PE_MissingParameter;
                 return false;
             }
+            if (!this->isHttps()) {
+                this->m_eLastError = PE_NotSSL;
+                return false;
+            }
 
             this->m_eLastError = PE_UnknownError;
             return true;
@@ -603,6 +655,11 @@ bool FriBIDPlugin::PerformAction(const char *action)
             if (!this->m_Info.sign.nonce || this->m_Info.sign.nonce[0] == '\0' ||
                 !this->m_Info.sign.message || this->m_Info.sign.message[0] == '\0') {
                 this->m_eLastError = PE_MissingParameter;
+                return false;
+            }
+
+            if (!this->isHttps()) {
+                this->m_eLastError = PE_NotSSL;
                 return false;
             }
 

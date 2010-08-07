@@ -8,6 +8,8 @@ void *Memory::Alloc(int size)
 
 char *Memory::AllocString(const char *str)
 {
+    if (!str)
+        return NULL;
     int len = strlen(str) +1;
     char* ret = (char *)Memory::Alloc(len);
     if (!ret)
@@ -18,6 +20,8 @@ char *Memory::AllocString(const char *str)
 
 char *Memory::AllocStringLower(const char *str)
 {
+    if (!str)
+        return NULL;
     int len = strlen(str) +1;
     char *ret = (char *)Memory::Alloc(len);
     if (!ret)

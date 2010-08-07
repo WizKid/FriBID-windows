@@ -100,8 +100,11 @@ private:
     PluginType m_eType;
     PluginError m_eLastError;
     PluginInfo m_Info;
+    char *m_sUrl;
 
     char **GetInfoPointer(const char *name, bool set, int *maxLength);
+    char *GetWindowProperty(const char *const identifiers[]);
+    bool isHttps();
 
 public:
     FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance);
