@@ -176,40 +176,56 @@
 			Filter="cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx"
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
-			<File
-				RelativePath=".\plugin\np_entry.cpp"
+			<Filter
+				Name="plugin"
 				>
-			</File>
-			<File
-				RelativePath=".\plugin\npn_gate.cpp"
+				<File
+					RelativePath=".\plugin\np_entry.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\plugin\npn_gate.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\plugin\npp_gate.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\plugin\plugin.cpp"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="common"
 				>
-			</File>
-			<File
-				RelativePath=".\plugin\npp_gate.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\plugin\plugin.cpp"
-				>
-			</File>
+				<File
+					RelativePath=".\common\memory.cpp"
+					>
+				</File>
+			</Filter>
 		</Filter>
 		<Filter
 			Name="Header Files"
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
-			<File
-				RelativePath=".\common\biderror.h"
+			<Filter
+				Name="common"
 				>
-			</File>
-			<File
-				RelativePath=".\plugin\plugin.h"
+				<File
+					RelativePath=".\common\memory.h"
+					>
+				</File>
+			</Filter>
+			<Filter
+				Name="plugin"
 				>
-			</File>
-			<File
-				RelativePath=".\resource.h"
-				>
-			</File>
+				<File
+					RelativePath=".\plugin\plugin.h"
+					>
+				</File>
+			</Filter>
 		</Filter>
 		<Filter
 			Name="Resource Files"

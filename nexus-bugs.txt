@@ -1,0 +1,3 @@
+- When checking the value sent to SetParam they allow "aa=a" even if it isn't a valid base64 string
+- When checking the value sent to SetParam they first validate the characters in the string and first after that the length of the string
+- var plugin = document.getElementById('pluginId'); for (var i in plugin) {}; crashes the Nexus plugin
