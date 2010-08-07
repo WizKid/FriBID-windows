@@ -56,9 +56,17 @@ enum PluginType {
 enum PluginError {
     PE_OK = 0,
     PE_UnknownError = 1, // Maybe this is used for something else in the original plugin?
-    PE_UnknownParam = 8004,
-    PE_BadCharValue = 8017,
-    PE_TooLongValue = 8018
+    PE_BadData =          8001,
+    PE_UserCancel =       8002,
+    PE_UnknownParam =     8004,
+    PE_InvalidAction =    8008,
+    PE_InvalidPIN =       8013,
+    PE_NotSSL =           8015,
+    PE_MissingParameter = 8016,
+    PE_BadCharValue =     8017,
+    PE_TooLongValue =     8018,
+    PE_HostnameIsIP =     8019,
+    PE_BlockedPIN =       8102
 };
 
 union PluginInfo {
@@ -93,7 +101,7 @@ private:
     PluginError m_eLastError;
     PluginInfo m_Info;
 
-    char **GetInfoPointer(const char *name, bool set);
+    char **GetInfoPointer(const char *name, bool set, int *maxLength);
 
 public:
     FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance);
@@ -110,7 +118,7 @@ public:
     const char *GetVersion();
     const char *GetParam(const char *name);
     bool SetParam(const char *name, const char *value);
-    int PerformAction(const char *action);
+    bool PerformAction(const char *action);
     void SetError(PluginError error);
 };
 

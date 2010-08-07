@@ -442,17 +442,17 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                     return false;
 
                 char *action = AllocStringLower(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
-                int ret = plugin->PerformAction(action);
+                plugin->PerformAction(action);
                 NPN_MemFree(action);
 
-                INT32_TO_NPVARIANT((int32_t)ret, *result);
+                INT32_TO_NPVARIANT((int32_t)plugin->GetLastError(), *result);
                 return true;
             }
             if (name == sGetLastError_id) {
                 if (argCount != 0)
                     return false;
 
-                int ret = plugin->GetLastError();
+                PluginError ret = plugin->GetLastError();
 
                 INT32_TO_NPVARIANT((int32_t)ret, *result);
                 return true;
@@ -519,8 +519,9 @@ const char *FriBIDPlugin::GetVersion()
     return "Personal_exe=4.10.4.3&persinst_exe=4.10.4.3&tokenapi_dll=4.10.4.2&personal_dll=4.10.4.2&np_prsnl_dll=4.10.4.3&lng_svse_dll=4.10.4.3&lng_frfr_dll=4.10.4.3&crdsiem_dll=4.10.4.3&crdsetec_dll=4.10.4.3&crdprism_dll=4.10.4.3&br_svse_dll=1.5.0.5&br_enu_dll=1.5.0.5&branding_dll=1.5.0.5&CSP_INSTALLED=TRUE&Personal=4.10.4.3&platform=win32&os_version=winvista&best_before=1283547033&";
 }
 
-char **FriBIDPlugin::GetInfoPointer(const char *name, bool set, int &maxLength)
+char **FriBIDPlugin::GetInfoPointer(const char *name, bool set, int *maxLength = NULL)
 {
+    if (maxLength) *maxLength = 5462;
     switch(this->m_eType) {
         case PT_Authentication:
             if (strcmp(name, "challenge") == 0)
@@ -535,10 +536,15 @@ char **FriBIDPlugin::GetInfoPointer(const char *name, bool set, int &maxLength)
         case PT_Signer:
             if (strcmp(name, "nonce") == 0)
                 return &this->m_Info.sign.nonce;
-            if (strcmp(name, "texttobesigned") == 0)
+            if (strcmp(name, "texttobesigned") == 0) {
+                if (maxLength) *maxLength = 136534;
                 return &this->m_Info.sign.message;
-            if (strcmp(name, "nonvisibledata") == 0)
+            }
+            if (strcmp(name, "nonvisibledata") == 0) {
+                // Nexus don't seems to have a limit but we set one anyway
+                if (maxLength) *maxLength = 10*1024*1024;
                 return &this->m_Info.sign.invisibleMessage;
+            }
             if (strcmp(name, "policys") == 0)
                 return &this->m_Info.sign.policys;
             if (strcmp(name, "subjects") == 0)
@@ -566,7 +572,8 @@ const char *FriBIDPlugin::GetParam(const char *name)
 
 bool FriBIDPlugin::SetParam(const char *name, const char *value)
 {
-    char **valuePtr = this->GetInfoPointer(name, true);
+    int maxLength;
+    char **valuePtr = this->GetInfoPointer(name, true, &maxLength);
 
     if (valuePtr == NULL) {
         this->m_eLastError = PE_UnknownParam;
@@ -575,8 +582,8 @@ bool FriBIDPlugin::SetParam(const char *name, const char *value)
 
     // Validate that the value is a base64 string. So valid characters are A-Z, a-z, 0-9 and + /
     // and it could end with = or ==.
-    // BUG: We should check the length first but Nexus does it in this order
-    // BUG: Nexus allow the =-character in the last two positions. Even if "aa=a" isn't a valid base64 string
+    // COMPAT: We should check the length first but Nexus does it in this order
+    // COMPAT: Nexus allow the =-character in the last two positions. Even if "aa=a" isn't a valid base64 string
     int len = strlen(value);
     for (int i = 0; i < len; i++) {
         const char c = value[i];
@@ -586,8 +593,7 @@ bool FriBIDPlugin::SetParam(const char *name, const char *value)
         }
     }
 
-    // TODO: 5462 was tested with signer and Nonce. Other params could have other sizes
-    if (len > 5462) {
+    if (len > maxLength) {
         this->m_eLastError = PE_TooLongValue;
         return false;
     }
@@ -605,29 +611,36 @@ bool FriBIDPlugin::SetParam(const char *name, const char *value)
     return true;
 }
 
-int FriBIDPlugin::PerformAction(const char *action)
+bool FriBIDPlugin::PerformAction(const char *action)
 {
-    this->m_eLastError = PE_UnknownError;
     switch(this->m_eType) {
         case PT_Authentication:
             if (strcmp(action, "authenticate") != 0)
                 break;
 
-            if (!this->m_Info.auth.challenge || this->m_Info.auth.challenge[0] == '\0')
-                return BIDERR_MissingParameter;
+            if (!this->m_Info.auth.challenge || this->m_Info.auth.challenge[0] == '\0') {
+                this->m_eLastError = PE_MissingParameter;
+                return false;
+            }
 
-            return 0;
+            this->m_eLastError = PE_UnknownError;
+            return true;
         case PT_Signer:
             if (strcmp(action, "sign") != 0)
                 break;
 
             if (!this->m_Info.sign.nonce || this->m_Info.sign.nonce[0] == '\0' ||
-                !this->m_Info.sign.message || this->m_Info.sign.message[0] == '\0')
-                return BIDERR_MissingParameter;
+                !this->m_Info.sign.message || this->m_Info.sign.message[0] == '\0') {
+                this->m_eLastError = PE_MissingParameter;
+                return false;
+            }
 
-            return 0;
+            this->m_eLastError = PE_UnknownError;
+            return true;
     }
-    return BIDERR_InvalidAction;
+
+    this->m_eLastError = PE_InvalidAction;
+    return false;
 }
 
 void FriBIDPlugin::SetError(PluginError error)
