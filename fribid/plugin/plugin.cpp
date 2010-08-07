@@ -72,6 +72,13 @@ char *AllocString(const char *str)
     return npOutString;
 }
 
+char *AllocStringLower(const char *str) {
+    char *lower = AllocString(str);
+    for (int i = 0; i < strlen(str); i++)
+        lower[i] = tolower(str[i]);
+    return lower;
+}
+
 
 // Helper class that can be used to map calls to the NPObject hooks
 // into virtual methods on instances of classes that derive from this
@@ -407,7 +414,9 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                 if (argCount != 1 || !NPVARIANT_IS_STRING(args[0]))
                     return false;
 
-                const char *ret = plugin->GetParam(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
+                char *param = AllocStringLower(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
+                const char *ret = plugin->GetParam(param);
+                NPN_MemFree(param);
 
                 if (ret) {
                     STRINGZ_TO_NPVARIANT(AllocString(ret), *result);
@@ -421,8 +430,9 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                     !NPVARIANT_IS_STRING(args[0]))
                     return false;
 
-                plugin->SetParam(NPVARIANT_TO_STRING(args[0]).UTF8Characters,
-                                 NPVARIANT_TO_STRING(args[1]).UTF8Characters);
+                char *param = AllocStringLower(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
+                plugin->SetParam(param, NPVARIANT_TO_STRING(args[1]).UTF8Characters);
+                NPN_MemFree(param);
 
                 INT32_TO_NPVARIANT((int32_t)plugin->GetLastError(), *result);
                 return true;
@@ -431,7 +441,9 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                 if (argCount != 1 || !NPVARIANT_IS_STRING(args[0]))
                     return false;
 
-                int ret = plugin->PerformAction(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
+                char *action = AllocStringLower(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
+                int ret = plugin->PerformAction(action);
+                NPN_MemFree(action);
 
                 INT32_TO_NPVARIANT((int32_t)ret, *result);
                 return true;
@@ -472,12 +484,12 @@ FriBIDPlugin::FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance) :
     }
 
     // Set default values
-    this->m_Info.sign.nonce = strdup("");
-    this->m_Info.sign.policys = strdup("");
-    this->m_Info.sign.subjectFilter = strdup("");
-    this->m_Info.sign.message = strdup("");
-    this->m_Info.sign.invisibleMessage = strdup("");
-    this->m_Info.sign.signature = strdup("");
+    this->m_Info.sign.nonce = AllocString("");
+    this->m_Info.sign.policys = AllocString("");
+    this->m_Info.sign.subjectFilter = AllocString("");
+    this->m_Info.sign.message = AllocString("");
+    this->m_Info.sign.invisibleMessage = AllocString("");
+    this->m_Info.sign.signature = AllocString("");
 
     sGetVersion_id = NPN_GetStringIdentifier("GetVersion");
     sGetParam_id = NPN_GetStringIdentifier("GetParam");
@@ -504,34 +516,34 @@ NPBool FriBIDPlugin::init(NPWindow* pNPWindow)
 
 const char *FriBIDPlugin::GetVersion()
 {
-    return "Personal_exe=4.10.4.3&persinst_exe=4.10.4.3&tokenapi_dll=4.10.4.2&personal_dll=4.10.4.2&np_prsnl_dll=4.10.4.3&lng_svse_dll=4.10.4.3&lng_frfr_dll=4.10.4.3&crdsiem_dll=4.10.4.3&crdsetec_dll=4.10.4.3&crdprism_dll=4.10.4.3&br_svse_dll=1.5.0.5&br_enu_dll=1.5.0.5&branding_dll=1.5.0.5&CSP_INSTALLED=TRUE&Personal=4.10.4.3&platform=win32&os_version=winvista&best_before=1282163706&";
+    return "Personal_exe=4.10.4.3&persinst_exe=4.10.4.3&tokenapi_dll=4.10.4.2&personal_dll=4.10.4.2&np_prsnl_dll=4.10.4.3&lng_svse_dll=4.10.4.3&lng_frfr_dll=4.10.4.3&crdsiem_dll=4.10.4.3&crdsetec_dll=4.10.4.3&crdprism_dll=4.10.4.3&br_svse_dll=1.5.0.5&br_enu_dll=1.5.0.5&branding_dll=1.5.0.5&CSP_INSTALLED=TRUE&Personal=4.10.4.3&platform=win32&os_version=winvista&best_before=1283547033&";
 }
 
-char **FriBIDPlugin::GetInfoPointer(const char *name, bool set)
+char **FriBIDPlugin::GetInfoPointer(const char *name, bool set, int &maxLength)
 {
     switch(this->m_eType) {
         case PT_Authentication:
-            if (strcmp(name, "Challenge") == 0)
+            if (strcmp(name, "challenge") == 0)
                 return &this->m_Info.auth.challenge;
-            if (strcmp(name, "Policys") == 0)
+            if (strcmp(name, "policys") == 0)
                 return &this->m_Info.auth.policys;
-            if (strcmp(name, "Subjects") == 0)
+            if (strcmp(name, "subjects") == 0)
                 return &this->m_Info.auth.subjectFilter;
-            if (!set && strcmp(name, "Signature") == 0)
+            if (!set && strcmp(name, "signature") == 0)
                 return &this->m_Info.auth.signature;
             break;
         case PT_Signer:
-            if (strcmp(name, "Nonce") == 0)
+            if (strcmp(name, "nonce") == 0)
                 return &this->m_Info.sign.nonce;
-            if (strcmp(name, "TextToBeSigned") == 0)
+            if (strcmp(name, "texttobesigned") == 0)
                 return &this->m_Info.sign.message;
-            if (strcmp(name, "NonVisibleData") == 0)
+            if (strcmp(name, "nonvisibledata") == 0)
                 return &this->m_Info.sign.invisibleMessage;
-            if (strcmp(name, "Policys") == 0)
+            if (strcmp(name, "policys") == 0)
                 return &this->m_Info.sign.policys;
-            if (strcmp(name, "Subjects") == 0)
+            if (strcmp(name, "subjects") == 0)
                 return &this->m_Info.sign.subjectFilter;
-            if (!set && strcmp(name, "Signature") == 0)
+            if (!set && strcmp(name, "signature") == 0)
                 return &this->m_Info.sign.signature;
             break;
     }
@@ -554,21 +566,6 @@ const char *FriBIDPlugin::GetParam(const char *name)
 
 bool FriBIDPlugin::SetParam(const char *name, const char *value)
 {
-    // 5462 was tested with signer and Nonce. Other params could have other sizes
-    if (strlen(value) > 5462) {
-        this->m_eLastError = PE_TooLongValue;
-        return false;
-    }
-
-    // Valid characters are A-Z, a-z, 0-9 and + / =
-    for (int i = 0; i < strlen(value); i++) {
-        const char c = value[i];
-        if (!(c == 43 || (c >= 47 && c <= 57) || c == 61 || (c >= 65 && c <= 90) || (c >= 97 && c <= 122))) {
-            this->m_eLastError = PE_BadCharValue;
-            return false;
-        }
-    }
-
     char **valuePtr = this->GetInfoPointer(name, true);
 
     if (valuePtr == NULL) {
@@ -576,9 +573,29 @@ bool FriBIDPlugin::SetParam(const char *name, const char *value)
         return false;
     }
 
-    free(*valuePtr);
+    // Validate that the value is a base64 string. So valid characters are A-Z, a-z, 0-9 and + /
+    // and it could end with = or ==.
+    // BUG: We should check the length first but Nexus does it in this order
+    // BUG: Nexus allow the =-character in the last two positions. Even if "aa=a" isn't a valid base64 string
+    int len = strlen(value);
+    for (int i = 0; i < len; i++) {
+        const char c = value[i];
+        if (!(c == 43 || (c >= 47 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c == 61 && i >= len -2))) {
+            this->m_eLastError = PE_BadCharValue;
+            return false;
+        }
+    }
 
-    *valuePtr = strdup(value);
+    // TODO: 5462 was tested with signer and Nonce. Other params could have other sizes
+    if (len > 5462) {
+        this->m_eLastError = PE_TooLongValue;
+        return false;
+    }
+
+    if (!*valuePtr)
+        NPN_MemFree(*valuePtr);
+
+    *valuePtr = AllocString(value);
     if (*valuePtr == NULL) {
         this->m_eLastError = PE_UnknownError; // TODO: What error should it really be?
         return false;
@@ -593,18 +610,19 @@ int FriBIDPlugin::PerformAction(const char *action)
     this->m_eLastError = PE_UnknownError;
     switch(this->m_eType) {
         case PT_Authentication:
-            if (strcmp(action, "Authenticate") != 0)
+            if (strcmp(action, "authenticate") != 0)
                 break;
 
-            if (!this->m_Info.auth.challenge)
+            if (!this->m_Info.auth.challenge || this->m_Info.auth.challenge[0] == '\0')
                 return BIDERR_MissingParameter;
 
             return 0;
         case PT_Signer:
-            if (strcmp(action, "Sign") != 0)
+            if (strcmp(action, "sign") != 0)
                 break;
 
-            if (!this->m_Info.sign.nonce || !this->m_Info.sign.message)
+            if (!this->m_Info.sign.nonce || this->m_Info.sign.nonce[0] == '\0' ||
+                !this->m_Info.sign.message || this->m_Info.sign.message[0] == '\0')
                 return BIDERR_MissingParameter;
 
             return 0;
