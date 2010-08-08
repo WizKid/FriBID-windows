@@ -41,7 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include\nspr&quot;;&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include&quot;"
+				AdditionalIncludeDirectories="&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include\nspr&quot;;&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include&quot;;D:\Program\OpenSSL\include"
 				PreprocessorDefinitions="WIN32;_WINDOWS;XP_WIN32;MOZILLA_STRICT_API;XPCOM_GLUE;XP_WIN;_X86_;NPSIMPLE_EXPORTS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -61,8 +61,10 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
+				AdditionalDependencies="libeay32.lib ssleay32.lib"
 				OutputFile="$(OutDir)\npfribid.dll"
 				LinkIncremental="2"
+				AdditionalLibraryDirectories="D:\Program\OpenSSL\lib"
 				ModuleDefinitionFile="npfribid.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
@@ -117,7 +119,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories="&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include\nspr&quot;;&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include&quot;"
+				AdditionalIncludeDirectories="&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include\nspr&quot;;&quot;E:\Mozilla\xulrunner-sdk-1.9.2.8\include&quot;;D:\Program\OpenSSL\include"
 				PreprocessorDefinitions="WIN32;_WINDOWS;XP_WIN32;MOZILLA_STRICT_API;XPCOM_GLUE;XP_WIN;_X86_;NPSIMPLE_EXPORTS"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
@@ -195,10 +197,18 @@
 					RelativePath=".\plugin\plugin.cpp"
 					>
 				</File>
+				<File
+					RelativePath=".\plugin\pluginbase.cpp"
+					>
+				</File>
 			</Filter>
 			<Filter
 				Name="common"
 				>
+				<File
+					RelativePath=".\common\base64.cpp"
+					>
+				</File>
 				<File
 					RelativePath=".\common\format.cpp"
 					>
@@ -212,7 +222,19 @@
 				Name="bankid"
 				>
 				<File
+					RelativePath=".\bankid\backend.cpp"
+					>
+				</File>
+				<File
 					RelativePath=".\bankid\bankid.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\bankid\pkcs12.cpp"
+					>
+				</File>
+				<File
+					RelativePath=".\bankid\xmldsig.cpp"
 					>
 				</File>
 			</Filter>
@@ -225,6 +247,10 @@
 			<Filter
 				Name="common"
 				>
+				<File
+					RelativePath=".\common\base64.h"
+					>
+				</File>
 				<File
 					RelativePath=".\common\format.h"
 					>
@@ -241,12 +267,28 @@
 					RelativePath=".\plugin\plugin.h"
 					>
 				</File>
+				<File
+					RelativePath=".\plugin\pluginbase.h"
+					>
+				</File>
 			</Filter>
 			<Filter
 				Name="bankid"
 				>
 				<File
+					RelativePath=".\bankid\backend.h"
+					>
+				</File>
+				<File
+					RelativePath=".\bankid\backend_private.h"
+					>
+				</File>
+				<File
 					RelativePath=".\bankid\bankid.h"
+					>
+				</File>
+				<File
+					RelativePath=".\bankid\xmldsig.h"
 					>
 				</File>
 			</Filter>

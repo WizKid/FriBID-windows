@@ -41,9 +41,11 @@
 //
 
 #include "plugin.h"
+#include "pluginbase.h"
 #include "../common/memory.h"
 #include "../bankid/bankid.h"
 #include "npfunctions.h"
+
 
 static NPIdentifier sGetVersion_id;
 static NPIdentifier sGetParam_id;
@@ -52,233 +54,90 @@ static NPIdentifier sPerformAction_id;
 static NPIdentifier sGetLastError_id;
 
 
-// Helper class that can be used to map calls to the NPObject hooks
-// into virtual methods on instances of classes that derive from this
-// class.
-class ScriptablePluginObjectBase : public NPObject
+string
+Lower(const string &input)
 {
-public:
-    ScriptablePluginObjectBase(NPP npp)
-        : m_pNpp(npp)
-    {
+    string ret(input);
+    for (string::iterator it = ret.begin(); it != ret.end(); ++it)
+        *it = tolower(*it);
+    return ret;
+}
+
+string
+NPVariantToString(NPVariant variant)
+{
+    NPString str = NPVARIANT_TO_STRING(variant);
+    return string(str.UTF8Characters, str.UTF8Length);
+}
+
+
+Param::Param()
+    : mValue(""), mMaxSize(0), mCanSet(false)
+{
+}
+
+Param::Param(const string &value, int maxSize, bool canSet)
+    : mValue(value), mMaxSize(maxSize), mCanSet(canSet)
+{
+}
+
+bool
+Param::canSet(bool force) const
+{
+    return force || this->mCanSet;
+}
+
+const string &
+Param::get() const
+{
+    return this->mValue;
+}
+
+void
+Param::set(const string &value)
+{
+    // Validate that the value is a base64 string. So valid characters are A-Z, a-z, 0-9 and + /
+    // and it could end with = or ==.
+    // COMPAT: The good way of doing this is to check the length first but Nexus does it in this order
+    // COMPAT: Nexus allow the =-character in the last two positions. Even if "aa=a" isn't a valid base64 string
+    int len = value.length();
+    for (int i = 0; i < len; i++) {
+        const char c = value[i];
+        if (!(c == 43 || (c >= 47 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c == 61 && i >= len -2)))
+            throw PluginException(PE_BadCharValue);
     }
 
-    virtual ~ScriptablePluginObjectBase()
-    {
-    }
+    if (len > this->mMaxSize)
+        throw PluginException(PE_TooLongValue);
 
-    // Virtual NPObject hooks called through this base class. Override
-    // as you see fit.
-    virtual void Invalidate();
-    virtual bool HasMethod(NPIdentifier name);
-    virtual bool Invoke(NPIdentifier name, const NPVariant *args,
-                        uint32_t argCount, NPVariant *result);
-    virtual bool InvokeDefault(const NPVariant *args, uint32_t argCount,
-                               NPVariant *result);
-    virtual bool HasProperty(NPIdentifier name);
-    virtual bool GetProperty(NPIdentifier name, NPVariant *result);
-    virtual bool SetProperty(NPIdentifier name, const NPVariant *value);
-    virtual bool RemoveProperty(NPIdentifier name);
-    virtual bool Enumerate(NPIdentifier **identifier, uint32_t *count);
-    virtual bool Construct(const NPVariant *args, uint32_t argCount,
-                           NPVariant *result);
+    this->mValue = value;
+}
 
-public:
-    static void _Deallocate(NPObject *npobj);
-    static void _Invalidate(NPObject *npobj);
-    static bool _HasMethod(NPObject *npobj, NPIdentifier name);
-    static bool _Invoke(NPObject *npobj, NPIdentifier name,
-                        const NPVariant *args, uint32_t argCount,
-                        NPVariant *result);
-    static bool _InvokeDefault(NPObject *npobj, const NPVariant *args,
-                               uint32_t argCount, NPVariant *result);
-    static bool _HasProperty(NPObject * npobj, NPIdentifier name);
-    static bool _GetProperty(NPObject *npobj, NPIdentifier name,
-                             NPVariant *result);
-    static bool _SetProperty(NPObject *npobj, NPIdentifier name,
-                             const NPVariant *value);
-    static bool _RemoveProperty(NPObject *npobj, NPIdentifier name);
-    static bool _Enumerate(NPObject *npobj, NPIdentifier **identifier,
-                           uint32_t *count);
-    static bool _Construct(NPObject *npobj, const NPVariant *args,
-                           uint32_t argCount, NPVariant *result);
 
-protected:
-    NPP m_pNpp;
+void
+ParamData::add(const string &name, Param param)
+{
+    this->mParams[name] = param;
 };
 
-#define DECLARE_NPOBJECT_CLASS_WITH_BASE(_class, ctor)                        \
-static NPClass s##_class##_NPClass = {                                        \
-    NP_CLASS_STRUCT_VERSION_CTOR,                                               \
-    ctor,                                                                       \
-    ScriptablePluginObjectBase::_Deallocate,                                    \
-    ScriptablePluginObjectBase::_Invalidate,                                    \
-    ScriptablePluginObjectBase::_HasMethod,                                     \
-    ScriptablePluginObjectBase::_Invoke,                                        \
-    ScriptablePluginObjectBase::_InvokeDefault,                                 \
-    ScriptablePluginObjectBase::_HasProperty,                                   \
-    ScriptablePluginObjectBase::_GetProperty,                                   \
-    ScriptablePluginObjectBase::_SetProperty,                                   \
-    ScriptablePluginObjectBase::_RemoveProperty,                                \
-    ScriptablePluginObjectBase::_Enumerate,                                     \
-    ScriptablePluginObjectBase::_Construct                                      \
-}
+const string &
+ParamData::get(const string &name) const
+{
+    map<string, Param>::const_iterator it = this->mParams.find(name);
+    if (it == this->mParams.end())
+        throw PluginException(PE_UnknownParam);
 
-#define GET_NPOBJECT_CLASS(_class) &s##_class##_NPClass
+    return it->second.get();
+}
 
 void
-ScriptablePluginObjectBase::Invalidate()
+ParamData::set(const string &name, const string &value, bool force)
 {
-}
+    map<string, Param>::iterator it = this->mParams.find(name);
+    if (it == this->mParams.end() || !it->second.canSet(force))
+        throw PluginException(PE_UnknownParam);
 
-bool
-ScriptablePluginObjectBase::HasMethod(NPIdentifier name)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::Invoke(NPIdentifier name, const NPVariant *args,
-                                   uint32_t argCount, NPVariant *result)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::InvokeDefault(const NPVariant *args,
-                                          uint32_t argCount, NPVariant *result)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::HasProperty(NPIdentifier name)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::GetProperty(NPIdentifier name, NPVariant *result)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::SetProperty(NPIdentifier name,
-                                        const NPVariant *value)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::RemoveProperty(NPIdentifier name)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::Enumerate(NPIdentifier **identifier,
-                                      uint32_t *count)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObjectBase::Construct(const NPVariant *args, uint32_t argCount,
-                                      NPVariant *result)
-{
-    return false;
-}
-
-// static
-void
-ScriptablePluginObjectBase::_Deallocate(NPObject *npobj)
-{
-    // Call the virtual destructor.
-    delete (ScriptablePluginObjectBase *)npobj;
-}
-
-// static
-void
-ScriptablePluginObjectBase::_Invalidate(NPObject *npobj)
-{
-    ((ScriptablePluginObjectBase *)npobj)->Invalidate();
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_HasMethod(NPObject *npobj, NPIdentifier name)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->HasMethod(name);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_Invoke(NPObject *npobj, NPIdentifier name,
-                                    const NPVariant *args, uint32_t argCount,
-                                    NPVariant *result)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->Invoke(name, args, argCount,
-                                                         result);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_InvokeDefault(NPObject *npobj,
-                                           const NPVariant *args,
-                                           uint32_t argCount,
-                                           NPVariant *result)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->InvokeDefault(args, argCount,
-                                                              result);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_HasProperty(NPObject * npobj, NPIdentifier name)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->HasProperty(name);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_GetProperty(NPObject *npobj, NPIdentifier name,
-                                         NPVariant *result)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->GetProperty(name, result);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_SetProperty(NPObject *npobj, NPIdentifier name,
-                                         const NPVariant *value)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->SetProperty(name, value);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_RemoveProperty(NPObject *npobj, NPIdentifier name)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->RemoveProperty(name);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_Enumerate(NPObject *npobj,
-                                       NPIdentifier **identifier,
-                                       uint32_t *count)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->Enumerate(identifier, count);
-}
-
-// static
-bool
-ScriptablePluginObjectBase::_Construct(NPObject *npobj, const NPVariant *args,
-                                       uint32_t argCount, NPVariant *result)
-{
-    return ((ScriptablePluginObjectBase *)npobj)->Construct(args, argCount,
-                                                          result);
+    it->second.set(value);
 }
 
 
@@ -294,13 +153,8 @@ public:
     }
 
     virtual bool HasMethod(NPIdentifier name);
-    virtual bool HasProperty(NPIdentifier name);
-    virtual bool GetProperty(NPIdentifier name, NPVariant *result);
-    virtual bool SetProperty(NPIdentifier name, const NPVariant *value);
     virtual bool Invoke(NPIdentifier name, const NPVariant *args,
                         uint32_t argCount, NPVariant *result);
-    virtual bool InvokeDefault(const NPVariant *args, uint32_t argCount,
-                               NPVariant *result);
 };
 
 static NPObject *
@@ -341,24 +195,6 @@ ScriptablePluginObject::HasMethod(NPIdentifier name)
 }
 
 bool
-ScriptablePluginObject::HasProperty(NPIdentifier name)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObject::GetProperty(NPIdentifier name, NPVariant *result)
-{
-    return false;
-}
-
-bool
-ScriptablePluginObject::SetProperty(NPIdentifier name, const NPVariant *value)
-{
-    return false;
-}
-
-bool
 ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                                uint32_t argCount, NPVariant *result)
 {
@@ -372,11 +208,9 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                 if (argCount != 0)
                     return false;
 
-                const char* ret = plugin->GetVersion();
-                if (!ret)
-                    return false;
-
-                STRINGZ_TO_NPVARIANT(Memory::AllocString(ret), *result);
+                string ret = plugin->GetVersion();
+                STRINGZ_TO_NPVARIANT(Memory::AllocString(ret.c_str()), *result);
+                plugin->SetError(PE_OK);
                 return true;
             }
             return false;
@@ -386,15 +220,16 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                 if (argCount != 1 || !NPVARIANT_IS_STRING(args[0]))
                     return false;
 
-                char *param = Memory::AllocStringLower(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
-                const char *ret = plugin->GetParam(param);
-                Memory::Free(param);
-
-                if (ret) {
-                    STRINGZ_TO_NPVARIANT(Memory::AllocString(ret), *result);
-                } else {
+                PluginError error = PE_OK;
+                try {
+                    string ret = plugin->GetParam(Lower(NPVariantToString(args[0])));
+                    STRINGZ_TO_NPVARIANT(Memory::AllocString(ret.c_str()), *result);
+                } catch (PluginException &exc) {
+                    error = exc.getError();
                     NULL_TO_NPVARIANT(*result);
                 }
+
+                plugin->SetError(error);
                 return true;
             }
             if (name == sSetParam_id) {
@@ -402,31 +237,37 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
                     !NPVARIANT_IS_STRING(args[0]))
                     return false;
 
-                char *param = Memory::AllocStringLower(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
-                plugin->SetParam(param, NPVARIANT_TO_STRING(args[1]).UTF8Characters);
-                Memory::Free(param);
+                PluginError error = PE_OK;
+                try {
+                    plugin->SetParam(Lower(NPVariantToString(args[0])), Lower(NPVariantToString(args[1])));
+                } catch (PluginException &exc) {
+                    error = exc.getError();
+                }
 
-                INT32_TO_NPVARIANT((int32_t)plugin->GetLastError(), *result);
+                plugin->SetError(error);
+                INT32_TO_NPVARIANT((int32_t)error, *result);
                 return true;
             }
             if (name == sPerformAction_id) {
                 if (argCount != 1 || !NPVARIANT_IS_STRING(args[0]))
                     return false;
 
-                char *action = Memory::AllocStringLower(NPVARIANT_TO_STRING(args[0]).UTF8Characters);
-                plugin->PerformAction(action);
-                Memory::Free(action);
+                PluginError error = PE_OK;
+                try {
+                    plugin->PerformAction(Lower(NPVariantToString(args[0])));
+                } catch (PluginException &exc) {
+                    error = exc.getError();
+                }
 
-                INT32_TO_NPVARIANT((int32_t)plugin->GetLastError(), *result);
+                plugin->SetError(error);
+                INT32_TO_NPVARIANT((int32_t)error, *result);
                 return true;
             }
             if (name == sGetLastError_id) {
                 if (argCount != 0)
                     return false;
 
-                PluginError ret = plugin->GetLastError();
-
-                INT32_TO_NPVARIANT((int32_t)ret, *result);
+                INT32_TO_NPVARIANT((int32_t)plugin->GetLastError(), *result);
                 return true;
             }
             return false;
@@ -435,33 +276,33 @@ ScriptablePluginObject::Invoke(NPIdentifier name, const NPVariant *args,
     return false;
 }
 
-bool
-ScriptablePluginObject::InvokeDefault(const NPVariant *args, uint32_t argCount,
-                                      NPVariant *result)
-{
-    return false;
-}
 
-FriBIDPlugin::FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance) :
-    m_pNPInstance(pNPInstance),
-    m_pScriptableObject(NULL),
-    m_pWindow(NULL)
+FriBIDPlugin::FriBIDPlugin(NPMIMEType pluginType, NPP instance) :
+    mInstance(instance),
+    mScriptableObject(NULL),
+    mWindow(NULL)
 {
     if (strcmp(MIME_VERSION, pluginType) == 0) {
-        m_eType = PT_Version;
+        mType = PT_Version;
     } else if (strcmp(MIME_AUTHENTICATION, pluginType) == 0) {
-        m_eType = PT_Authentication;
+        mType = PT_Authentication;
     } else if (strcmp(MIME_SIGNER, pluginType) == 0) {
-        m_eType = PT_Signer;
+        mType = PT_Signer;
     }
 
-    // Set default values
-    this->m_Info.sign.nonce = Memory::AllocString("");
-    this->m_Info.sign.policys = Memory::AllocString("");
-    this->m_Info.sign.subjectFilter = Memory::AllocString("");
-    this->m_Info.sign.message = Memory::AllocString("");
-    this->m_Info.sign.invisibleMessage = Memory::AllocString("");
-    this->m_Info.sign.signature = Memory::AllocString("");
+    if (mType != PT_Version) {
+        if (mType == PT_Signer) {
+            this->mParams.add("nonce", Param("", 5462, true));
+            this->mParams.add("texttobesigned", Param("", 136534, true));
+            this->mParams.add("nonvisibledata", Param("", 10*1024*1024, true));
+        } else {
+            this->mParams.add("challenge", Param("", 5462, true));
+        }
+
+        this->mParams.add("policys", Param("", 5462, true));
+        this->mParams.add("subjects", Param("", 5462, true));
+        this->mParams.add("signature", Param("", 5462, false));
+    }
 
     sGetVersion_id = NPN_GetStringIdentifier("GetVersion");
     sGetParam_id = NPN_GetStringIdentifier("GetParam");
@@ -472,53 +313,53 @@ FriBIDPlugin::FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance) :
     static const char *const hrefIdentifiers[] = {
         "location", "href", NULL
     };
-    this->m_sUrl = this->GetWindowProperty(hrefIdentifiers);
+    this->mUrl = this->GetWindowProperty(hrefIdentifiers);
     static const char *const hostnameIdentifiers[] = {
         "location", "hostname", NULL
     };
-    this->m_sHostname = this->GetWindowProperty(hostnameIdentifiers);
-    this->m_sIpAddress = Memory::AllocString("127.0.0.1");
+    this->mHostname = this->GetWindowProperty(hostnameIdentifiers);
+    this->mIpAddress = string("127.0.0.1");
 }
 
 FriBIDPlugin::~FriBIDPlugin()
 {
-    if (this->m_sUrl)
-        Memory::Free(this->m_sUrl);
-    if (m_pScriptableObject)
-        NPN_ReleaseObject(m_pScriptableObject);
+    if (this->mScriptableObject)
+        NPN_ReleaseObject(this->mScriptableObject);
 }
 
-NPBool FriBIDPlugin::init(NPWindow* pNPWindow)
+NPBool
+FriBIDPlugin::init(NPWindow* window)
 {
-    if(pNPWindow == NULL)
+    if(window == NULL)
         return false;
 
-    this->m_pWindow = pNPWindow;
-
+    this->mWindow = window;
     return true;
 }
 
-bool FriBIDPlugin::isHttps()
+bool
+FriBIDPlugin::isHttps()
 {
-    return (this->m_sUrl && strncmp(this->m_sUrl, "https://", 8) == 0);
+    return this->mUrl.find("https://") == 0;
 }
 
-char *FriBIDPlugin::GetWindowProperty(const char *const identifiers[])
+string
+FriBIDPlugin::GetWindowProperty(const char *const identifiers[])
 {
     NPObject *obj = NULL;
-    NPN_GetValue(this->m_pNPInstance, NPNVWindowNPObject, &obj);
+    NPN_GetValue(this->mInstance, NPNVWindowNPObject, &obj);
     if (!obj)
-        return NULL;
+        return "";
 
     NPVariant value;
-    char *ret = NULL;
+    string ret = "";
     const char *const *identifier = &identifiers[0];
     while (true) {
         NPIdentifier ident = NPN_GetStringIdentifier(*identifier);
         if (!ident)
             break;
 
-        NPN_GetProperty(this->m_pNPInstance, obj, ident, &value);
+        NPN_GetProperty(this->mInstance, obj, ident, &value);
         NPN_ReleaseObject(obj);
 
         identifier++;
@@ -528,7 +369,7 @@ char *FriBIDPlugin::GetWindowProperty(const char *const identifiers[])
             obj = NPVARIANT_TO_OBJECT(value);
         } else {
             if (NPVARIANT_IS_STRING(value))
-                ret = Memory::AllocString(NPVARIANT_TO_STRING(value).UTF8Characters);
+                ret = NPVariantToString(value);
             break;
         }
     }
@@ -539,173 +380,97 @@ char *FriBIDPlugin::GetWindowProperty(const char *const identifiers[])
     return ret;
 }
 
-const char *FriBIDPlugin::GetVersion()
+string
+FriBIDPlugin::GetVersion()
 {
     return "Personal_exe=4.10.4.3&persinst_exe=4.10.4.3&tokenapi_dll=4.10.4.2&personal_dll=4.10.4.2&np_prsnl_dll=4.10.4.3&lng_svse_dll=4.10.4.3&lng_frfr_dll=4.10.4.3&crdsiem_dll=4.10.4.3&crdsetec_dll=4.10.4.3&crdprism_dll=4.10.4.3&br_svse_dll=1.5.0.5&br_enu_dll=1.5.0.5&branding_dll=1.5.0.5&CSP_INSTALLED=TRUE&Personal=4.10.4.3&platform=win32&os_version=winvista&best_before=1283547033&";
 }
 
-char **FriBIDPlugin::GetInfoPointer(const char *name, bool set, int *maxLength = NULL)
+const string &
+FriBIDPlugin::GetParam(const string &name)
 {
-    if (maxLength) *maxLength = 5462;
-    switch(this->m_eType) {
-        case PT_Authentication:
-            if (strcmp(name, "challenge") == 0)
-                return &this->m_Info.auth.challenge;
-            if (strcmp(name, "policys") == 0)
-                return &this->m_Info.auth.policys;
-            if (strcmp(name, "subjects") == 0)
-                return &this->m_Info.auth.subjectFilter;
-            if (!set && strcmp(name, "signature") == 0)
-                return &this->m_Info.auth.signature;
-            break;
-        case PT_Signer:
-            if (strcmp(name, "nonce") == 0)
-                return &this->m_Info.sign.nonce;
-            if (strcmp(name, "texttobesigned") == 0) {
-                if (maxLength) *maxLength = 136534;
-                return &this->m_Info.sign.message;
-            }
-            if (strcmp(name, "nonvisibledata") == 0) {
-                // Nexus don't seems to have a limit but we set one anyway
-                if (maxLength) *maxLength = 10*1024*1024;
-                return &this->m_Info.sign.invisibleMessage;
-            }
-            if (strcmp(name, "policys") == 0)
-                return &this->m_Info.sign.policys;
-            if (strcmp(name, "subjects") == 0)
-                return &this->m_Info.sign.subjectFilter;
-            if (!set && strcmp(name, "signature") == 0)
-                return &this->m_Info.sign.signature;
-            break;
-    }
-
-    return NULL;
+    return this->mParams.get(name);
 }
 
-const char *FriBIDPlugin::GetParam(const char *name)
+void
+FriBIDPlugin::SetParam(const string &name, const string &value)
 {
-    char **valuePtr = this->GetInfoPointer(name, false);
-
-    if (valuePtr == NULL || *valuePtr == NULL) {
-        this->m_eLastError = PE_UnknownParam;
-        return NULL;
-    }
-
-    this->m_eLastError = PE_OK;
-    return *valuePtr;
+    return this->mParams.set(name, value, false);
 }
 
-void FriBIDPlugin::SetParam(const char *name, const char *value)
+void
+FriBIDPlugin::PerformAction(const string &action)
 {
-    int maxLength;
-    char **valuePtr = this->GetInfoPointer(name, true, &maxLength);
+    switch(this->mType) {
+        case PT_Authentication: {
+            if (action.compare("authenticate") != 0)
+                break;
 
-    if (valuePtr == NULL) {
-        this->m_eLastError = PE_UnknownParam;
-        return;
-    }
+            const string &nonce = this->mParams.get("challenge");
+            if (nonce.empty())
+                throw PluginException(PE_MissingParameter);
 
-    // Validate that the value is a base64 string. So valid characters are A-Z, a-z, 0-9 and + /
-    // and it could end with = or ==.
-    // COMPAT: The good way of doing this is to check the length first but Nexus does it in this order
-    // COMPAT: Nexus allow the =-character in the last two positions. Even if "aa=a" isn't a valid base64 string
-    int len = strlen(value);
-    for (int i = 0; i < len; i++) {
-        const char c = value[i];
-        if (!(c == 43 || (c >= 47 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c == 61 && i >= len -2))) {
-            this->m_eLastError = PE_BadCharValue;
+            if (!this->isHttps())
+                throw PluginException(PE_NotSSL);
+
+            try {
+                /*
+                string signature = BankId::authenticate(nonce, this->mParams.get("subjectFilter"),
+                                                        this->mHostname, this->mIpAddress);
+                */
+                string signature = "test";
+                this->mParams.set("signature", signature, true);
+            } catch (exception) {
+                throw PluginException(PE_UnknownError);
+            }
+            return;
+        }
+        case PT_Signer: {
+            if (action.compare("sign") != 0)
+                break;
+
+            const string &nonce = this->mParams.get("nonce");
+            const string &message = this->mParams.get("texttobesigned");
+            if (nonce.empty() || message.empty())
+                throw PluginException(PE_MissingParameter);
+
+            if (!this->isHttps())
+                throw PluginException(PE_NotSSL);
+
+            try {
+                /*
+                string signature = BankId::sign(nonce, this->mParams.get("subjectfilter"),
+                                                message, this->mParams.get("nonvisibledata"),
+                                                this->mHostname, this->mIpAddress);
+                */
+                string signature = "test";
+                this->mParams.set("signature", signature, true);
+            } catch (exception) {
+                throw PluginException(PE_UnknownError);
+            }
             return;
         }
     }
 
-    if (len > maxLength) {
-        this->m_eLastError = PE_TooLongValue;
-        return;
-    }
-
-    if (!*valuePtr)
-        Memory::Free(*valuePtr);
-
-    *valuePtr = Memory::AllocString(value);
-    if (*valuePtr == NULL) {
-        this->m_eLastError = PE_UnknownError; // TODO: What error should it really be?
-        return;
-    }
-
-    this->m_eLastError = PE_OK;
+    throw PluginException(PE_InvalidAction);
 }
 
-void FriBIDPlugin::PerformAction(const char *action)
+void
+FriBIDPlugin::SetError(PluginError error)
 {
-    char *ret = NULL;
-    switch(this->m_eType) {
-        case PT_Authentication:
-            if (strcmp(action, "authenticate") != 0)
-                break;
-
-            if (!this->m_Info.auth.challenge || this->m_Info.auth.challenge[0] == '\0') {
-                this->m_eLastError = PE_MissingParameter;
-                return;
-            }
-            if (!this->isHttps()) {
-                this->m_eLastError = PE_NotSSL;
-                return;
-            }
-
-            this->m_eLastError = BankId::authenticate(this->m_Info.auth.challenge,
-                                                      this->m_Info.auth.subjectFilter,
-                                                      this->m_sHostname,
-                                                      this->m_sIpAddress, &ret);
-            if (ret) {
-                if (this->m_Info.sign.signature)
-                    Memory::Free(this->m_Info.sign.signature);
-                this->m_Info.sign.signature = ret;
-            }
-            return;
-        case PT_Signer:
-            if (strcmp(action, "sign") != 0)
-                break;
-
-            if (!this->m_Info.sign.nonce || this->m_Info.sign.nonce[0] == '\0' ||
-                !this->m_Info.sign.message || this->m_Info.sign.message[0] == '\0') {
-                this->m_eLastError = PE_MissingParameter;
-                return;
-            }
-
-            if (!this->isHttps()) {
-                this->m_eLastError = PE_NotSSL;
-                return;
-            }
-
-            this->m_eLastError = BankId::sign(this->m_Info.sign.nonce, this->m_Info.sign.subjectFilter,
-                                              this->m_Info.sign.message, this->m_Info.sign.invisibleMessage,
-                                              this->m_sHostname, this->m_sIpAddress, &ret);
-            if (ret) {
-                if (this->m_Info.sign.signature)
-                    Memory::Free(this->m_Info.sign.signature);
-                this->m_Info.sign.signature = ret;
-            }
-            return;
-    }
-
-    this->m_eLastError = PE_InvalidAction;
-}
-
-void FriBIDPlugin::SetError(PluginError error)
-{
-    this->m_eLastError = error;
+    this->mLastError = error;
 }
 
 NPObject *
 FriBIDPlugin::GetScriptableObject()
 {
-    if (!m_pScriptableObject) {
-        m_pScriptableObject = NPN_CreateObject(m_pNPInstance,
+    if (!this->mScriptableObject) {
+        this->mScriptableObject = NPN_CreateObject(mInstance,
             GET_NPOBJECT_CLASS(ScriptablePluginObject));
     }
 
-    if (m_pScriptableObject)
-        NPN_RetainObject(m_pScriptableObject);
+    if (this->mScriptableObject)
+        NPN_RetainObject(this->mScriptableObject);
 
-    return m_pScriptableObject;
+    return this->mScriptableObject;
 }

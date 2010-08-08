@@ -38,6 +38,9 @@
 #ifndef __PLUGIN_H__
 #define __PLUGIN_H__
 
+#include <map>
+#include <string>
+
 #include "npapi.h"
 #include "npruntime.h"
 
@@ -46,6 +49,8 @@
 #define MIME_SIGNER "application/x-personal-signer2-test"
 
 #define NO_FILE_EXTENSIONS ""
+
+using namespace std;
 
 enum PluginType {
     PT_Version,
@@ -69,62 +74,73 @@ enum PluginError {
     PE_BlockedPIN =       8102
 };
 
-union Data {
-    struct {
-        /* Input parameters */
-        char *challenge;
-        char *policys;
-        char *subjectFilter;
-        void *dummy0, *dummy1; // To be compatible with .sign below
-        /* Output parameters */
-        char *signature;
-    } auth;
-    struct {
-        /* Input parameters */
-        char *nonce;
-        char *policys;
-        char *subjectFilter;
-        char *message;
-        char *invisibleMessage;
-        /* Output parameters */
-        char *signature;
-    } sign;
+class PluginException : exception
+{
+private:
+    PluginError error;
+public:
+    PluginException(PluginError error) : error(error) {}
+    PluginError getError() { return error; };
+};
+
+class Param {
+private:
+    int mMaxSize;
+    string mValue;
+    bool mCanSet;
+
+public:
+    Param();
+    Param(const string &value, int maxSize, bool canSet);
+
+    const string &get() const;
+    void set(const string &value);
+    bool canSet(bool force) const;
+};
+
+class ParamData {
+protected:
+    map<string, Param> mParams;
+
+public:
+    void add(const string &name, Param param);
+
+    const string &get(const string &name) const;
+    void set(const string &name, const string &value, bool force);
 };
 
 class FriBIDPlugin
 {
 private:
-    NPP m_pNPInstance;
-    NPObject *m_pScriptableObject;
-    NPWindow *m_pWindow;
-    PluginType m_eType;
-    PluginError m_eLastError;
-    Data m_Info;
-    char *m_sUrl;
-    char *m_sHostname;
-    char *m_sIpAddress;
+    NPP mInstance;
+    NPObject *mScriptableObject;
+    NPWindow *mWindow;
+    PluginType mType;
+    PluginError mLastError;
+    string mUrl;
+    string mHostname;
+    string mIpAddress;
+    ParamData mParams;
 
-    char **GetInfoPointer(const char *name, bool set, int *maxLength);
-    char *GetWindowProperty(const char *const identifiers[]);
+    string GetWindowProperty(const char *const identifiers[]);
     bool isHttps();
 
 public:
     FriBIDPlugin(NPMIMEType pluginType, NPP pNPInstance);
     ~FriBIDPlugin();
 
-    Data GetInfo() { return this->m_Info; };
-    PluginType GetType() { return this->m_eType; };
-    PluginError GetLastError() { return this->m_eLastError; };
+    PluginType GetType() { return this->mType; };
+    PluginError GetLastError() { return this->mLastError; };
+    void SetError(PluginError error);
 
-    NPBool init(NPWindow* pNPWindow);
+    NPBool init(NPWindow* window);
   
     NPObject *GetScriptableObject();
 
-    const char *GetVersion();
-    const char *GetParam(const char *name);
-    void SetParam(const char *name, const char *value);
-    void PerformAction(const char *action);
-    void SetError(PluginError error);
+    string GetVersion();
+    const string &GetParam(const string &name);
+    void SetParam(const string &name, const string &value);
+    void PerformAction(const string &action);
 };
 
 #endif // __PLUGIN_H__

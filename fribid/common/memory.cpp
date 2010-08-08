@@ -6,6 +6,11 @@ void *Memory::Alloc(int size)
     return NPN_MemAlloc(size);
 }
 
+void Memory::Free(void *ptr)
+{
+    NPN_MemFree(ptr);
+}
+
 char *Memory::AllocString(const char *str)
 {
     if (!str)
@@ -30,9 +35,4 @@ char *Memory::AllocStringLower(const char *str)
     for (int i = 0; i < len; i++)
         ret[i] = tolower(str[i]);
     return ret;
-}
-
-void Memory::Free(void *ptr)
-{
-    NPN_MemFree(ptr);
 }

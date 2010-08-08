@@ -33,6 +33,16 @@
                 }
             }
 
+            function escapeHTML(str) {
+                try {
+                    return str.replace(/&/g,'&amp;').
+                               replace(/>/g,'&gt;').
+                               replace(/</g,'&lt;').
+                               replace(/"/g,'&quot;');
+                } catch (e) {}
+                return str;
+            }
+
             function printResult(title, tests, obj1, obj2) {
                 document.write("<h2>"+ title +"</h2><table><thead><td>Test</td><td>Expected</td><td></td><td>Result</td></thead>");
                 for (var i in tests) {
@@ -40,7 +50,7 @@
                     var res2 = runCode(obj2, tests[i]);
                     var equal = (res1 == null && res2 == null || res1 != null && res2 != null && res1.toString() == res2.toString());
                     var equalStr = (equal) ? "==" : "!=";
-                    document.write("<tr "+ ((!equal) ? "style='color: #AA0000'" : "") +"><td>"+ tests[i] +"<td>"+ res1 +"</td><td>"+ equalStr +"</td><td>"+ res2 +"</td></tr>");
+                    document.write("<tr "+ ((!equal) ? "style='color: #AA0000'" : "") +"><td>"+ tests[i] +"<td>"+ escapeHTML(res1) +"</td><td>"+ equalStr +"</td><td>"+ escapeHTML(res2) +"</td></tr>");
                 }
                 document.write("</table>");
            }
